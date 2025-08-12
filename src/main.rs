@@ -14,7 +14,7 @@ fn setup_ui(mut commands: Commands) {
     commands
         .spawn((
             Text::new(
-                "REALISTIC BLACK HOLE SIMULATION\n\
+                "BLACK HOLE SIMULATION\n\n\
                 Controls:\n\
                 W/S - Move camera closer/farther\n\
                 A/D - Rotate camera left/right\n\
