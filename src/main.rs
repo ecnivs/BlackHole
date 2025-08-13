@@ -2,7 +2,6 @@ mod blackhole;
 
 use bevy::prelude::*;
 use bevy::window::{WindowResolution, PresentMode};
-use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use blackhole::{BlackHolePlugin};
 
 #[derive(Component)]
@@ -66,7 +65,6 @@ fn main() {
                 }),
                 ..default()
             }),
-            FrameTimeDiagnosticsPlugin::default(),
             BlackHolePlugin,
         ))
         .add_systems(Startup, setup_ui)

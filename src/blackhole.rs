@@ -60,12 +60,7 @@ fn setup_blackhole(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    const SOLAR_MASS: f32 = 1.989e30;
     const BLACK_HOLE_MASS_SOLAR: f32 = 10.0;
-    const G: f32 = 6.674e-11;
-    const C: f32 = 2.998e8;
-
-    let rs = 2.0 * G * (BLACK_HOLE_MASS_SOLAR * SOLAR_MASS) / (C * C);
     let rs_scaled = 1.0;
 
     commands.spawn((
@@ -265,10 +260,8 @@ fn animate_accretion_disk(
     black_hole_query: Query<&BlackHole>,
     mut particle_query: Query<(&mut Transform, &mut AccretionParticle)>,
 ) {
-    if let Ok(black_hole) = black_hole_query.get_single() {
+    if let Ok(black_hole) = black_hole_query.single() {
         for (mut transform, mut particle) in particle_query.iter_mut() {
-            particle.phase += particle.angular_velocity * time.delta_secs();
-
             let r = particle.orbital_radius;
             let rs = black_hole.schwarzschild_radius;
 
@@ -279,21 +272,23 @@ fn animate_accretion_disk(
                 0.1
             };
 
-            let corrected_angular_velocity = particle.angular_velocity * time_dilation;
+            let relativistic_ang_vel = particle.angular_velocity * time_dilation;
+            particle.phase += relativistic_ang_vel * time.delta_secs();
+
             let x = r * particle.phase.cos();
             let z = r * particle.phase.sin();
 
-            let precession = black_hole.spin * 0.1 * time.elapsed_secs() / r;
-            let y = 0.05 * (particle.phase * 5.0 + precession).sin() * (rs / r);
+            let precession = black_hole.spin * 0.05 * time.elapsed_secs() * time_dilation / r;            let y = 0.05 * (particle.phase * 5.0 + precession).sin() * (rs / r);
 
             transform.translation = Vec3::new(x, y, z);
 
             if r > black_hole.schwarzschild_radius * 1.01 {
-                particle.orbital_radius -= 0.01 * time.delta_secs() * (rs / r).powf(2.0);
-            }
+                particle.orbital_radius -= 0.01 * time.delta_secs() * time_dilation * (rs / r).powf(2.0);            }
 
             if particle.orbital_radius < black_hole.schwarzschild_radius * 1.01 {
                 particle.orbital_radius = particle.last_stable_orbit + fastrand::f32() * 20.0;
+                let spawn_dilation = (1.0 - rs / particle.orbital_radius).sqrt();
+                particle.angular_velocity *= spawn_dilation;
                 particle.phase = fastrand::f32() * 2.0 * PI;
             }
         }
@@ -305,7 +300,7 @@ fn update_grid_warping(
     mut meshes: ResMut<Assets<Mesh>>,
     grid_query: Query<&Mesh3d, With<GridMesh>>,
 ) {
-    if let Ok(black_hole) = black_hole_query.get_single() {
+    if let Ok(black_hole) = black_hole_query.single() {
         for mesh3d in grid_query.iter() {
             if let Some(mesh) = meshes.get_mut(&mesh3d.0) {
                 if let Some(positions) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION) {
@@ -331,41 +326,49 @@ fn update_grid_warping(
 }
 
 fn animate_particles(
-    time: Res<Time>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    query: Query<(&MeshMaterial3d<StandardMaterial>, &AccretionParticle), With<ParticleMaterial>>,
+    camera_query: Query<&Transform, With<Camera3d>>,
+    query: Query<(&Transform, &MeshMaterial3d<StandardMaterial>, &AccretionParticle), With<ParticleMaterial>>,
 ) {
     const C: f32 = 2.998e8;
 
-    for (material3d, particle) in query.iter() {
-        if let Some(material) = materials.get_mut(&material3d.0) {
-            let v = particle.velocity.length();
-            let fake_c_scale = 0.1;
-            let beta = ((v / C) / fake_c_scale).clamp(0.0, 0.9999);
+    if let Ok(camera_transform) = camera_query.get_single() {
+        let camera_pos = camera_transform.translation;
 
-            let velocity_dir = particle.velocity.normalize();
-            let view_dir = Vec3::Z;
-            let cos_theta = velocity_dir.dot(view_dir);
+        for (particle_transform, material3d, particle) in query.iter() {
+            if let Some(material) = materials.get_mut(&material3d.0) {
+                let particle_pos = particle_transform.translation;
 
-            let delta = ((1.0 + beta * cos_theta) / (1.0 - beta * cos_theta)).sqrt();
+                let observer_dir = (camera_pos - particle_pos).normalize();
+                let velocity_dir = particle.velocity.normalize();
 
-            let shifted_temp = particle.temperature * delta;
-            let base_color = temperature_to_color(shifted_temp);
+                let cos_theta = velocity_dir.dot(observer_dir);
+                let v = particle.velocity.length();
+                let fake_c_scale = 0.1;
+                let beta = ((v / C) / fake_c_scale).clamp(0.0, 0.9999);
 
-            let intensity = 0.5 + delta.powf(5.0);
-            let rgb: Vec3 = base_color.to_linear().to_vec3() * intensity;
-            material.emissive = Color::linear_rgb(rgb.x, rgb.y, rgb.z).into();
+                let gamma_factor = (1.0 - beta * beta).sqrt();
+                let doppler_factor = gamma_factor / (1.0 - beta * cos_theta);
+
+                let shifted_temp = particle.temperature * doppler_factor;
+                let base_color = temperature_to_color(shifted_temp);
+
+                let beaming_factor = doppler_factor.powf(3.0);
+                let intensity = 0.5 + beaming_factor.clamp(0.1, 5.0);
+
+                let rgb: Vec3 = base_color.to_linear().to_vec3() * intensity;
+                material.emissive = Color::linear_rgb(rgb.x, rgb.y, rgb.z).into();
+            }
         }
     }
 }
 
 
 fn update_particle_temperatures(
-    time: Res<Time>,
     black_hole_query: Query<&BlackHole>,
     mut particle_query: Query<&mut AccretionParticle>,
 ) {
-    if let Ok(black_hole) = black_hole_query.get_single() {
+    if let Ok(black_hole) = black_hole_query.single() {
         for mut particle in particle_query.iter_mut() {
             // Temperature increases as particles spiral inward due to compression and friction
             let r = particle.orbital_radius;
@@ -390,7 +393,7 @@ fn camera_controller(
     mut camera_query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
     for (mut transform, mut controller) in camera_query.iter_mut() {
-        let mut movement = Vec3::ZERO;
+        let movement = Vec3::ZERO;
         let mut rotation_changed = false;
 
         if input.pressed(KeyCode::KeyW) {
