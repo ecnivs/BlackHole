@@ -332,7 +332,7 @@ fn animate_particles(
 ) {
     const C: f32 = 2.998e8;
 
-    if let Ok(camera_transform) = camera_query.get_single() {
+    if let Ok(camera_transform) = camera_query.single() {
         let camera_pos = camera_transform.translation;
 
         for (particle_transform, material3d, particle) in query.iter() {
