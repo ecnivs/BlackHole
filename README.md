@@ -1,7 +1,21 @@
-# Black Hole Simulation
-> Real-time, interactive black hole visualization written in Rust
+<h1 align="center">Black Hole Simulation</h1>
+<p align="center"><em>Real-time, interactive black hole visualization written in Rust</em></p>
 
 <img width="1401" height="735" alt="swappy-20250813-153940" src="https://github.com/user-attachments/assets/584c9aa1-2a83-4c5d-803d-d3070af5940e" />
+
+<p align="center">
+  <a href="https://github.com/ecnivs/blackhole/stargazers">
+    <img src="https://img.shields.io/github/stars/ecnivs/blackhole?style=flat-square">
+  </a>
+  <a href="https://github.com/ecnivs/blackhole/issues">
+    <img src="https://img.shields.io/github/issues/ecnivs/blackhole?style=flat-square">
+  </a>
+  <a href="https://github.com/ecnivs/blackhole/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/ecnivs/blackhole?style=flat-square">
+  </a>
+  <img src="https://img.shields.io/github/languages/top/ecnivs/blackhole?style=flat-square">
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-informational?style=flat-square">
+</p>
 
 ## Overview
 This project simulates an [accretion disk](https://en.wikipedia.org/wiki/Accretion_disk), particle heating, and stylized [spacetime curvature](https://en.wikipedia.org/wiki/Curved_spacetime) (grid warping) around the **black hole**, complete with camera controls.
