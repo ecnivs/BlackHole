@@ -6,14 +6,17 @@ pub struct BlackHolePlugin;
 
 impl Plugin for BlackHolePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_blackhole)
-            .add_systems(Update, (
+        app.add_systems(Startup, setup_blackhole).add_systems(
+            Update,
+            (
                 animate_accretion_disk,
                 update_grid_warping,
                 animate_particles,
                 update_particle_temperatures,
                 camera_controller,
-            ).chain());
+            )
+                .chain(),
+        );
     }
 }
 
@@ -65,8 +68,7 @@ fn setup_blackhole(
 
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 8.0, 12.0)
-            .looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(0.0, 8.0, 12.0).looking_at(Vec3::ZERO, Vec3::Y),
         CameraController {
             distance: 15.0,
             azimuth: 0.0,
@@ -83,12 +85,7 @@ fn setup_blackhole(
             illuminance: 100.0,
             ..default()
         },
-        Transform::from_rotation(Quat::from_euler(
-            EulerRot::XYZ,
-            -PI / 3.0,
-            PI / 6.0,
-            0.0,
-        )),
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 3.0, PI / 6.0, 0.0)),
     ));
 
     commands.insert_resource(AmbientLight {
@@ -137,7 +134,8 @@ fn setup_blackhole(
 
     for i in 0..500 {
         let progress = (i as f32) / 499.0;
-        let radius = last_stable_orbit + (outer_disk_radius - last_stable_orbit) * (progress * progress * progress);
+        let radius = last_stable_orbit
+            + (outer_disk_radius - last_stable_orbit) * (progress * progress * progress);
         let phase = (i as f32) * 0.1257;
 
         let orbital_velocity = (BLACK_HOLE_MASS_SOLAR / radius).sqrt();
@@ -155,17 +153,17 @@ fn setup_blackhole(
                 metallic: 0.0,
                 ..default()
             })),
-            Transform::from_translation(Vec3::new(
-                radius * phase.cos(),
-                0.0,
-                radius * phase.sin(),
-            )),
+            Transform::from_translation(Vec3::new(radius * phase.cos(), 0.0, radius * phase.sin())),
             AccretionParticle {
                 orbital_radius: radius,
                 angular_velocity,
                 phase,
                 temperature,
-                velocity: Vec3::new(-orbital_velocity * phase.sin(), 0.0, orbital_velocity * phase.cos()),
+                velocity: Vec3::new(
+                    -orbital_velocity * phase.sin(),
+                    0.0,
+                    orbital_velocity * phase.cos(),
+                ),
                 last_stable_orbit,
             },
             ParticleMaterial,
@@ -278,12 +276,15 @@ fn animate_accretion_disk(
             let x = r * particle.phase.cos();
             let z = r * particle.phase.sin();
 
-            let precession = black_hole.spin * 0.05 * time.elapsed_secs() * time_dilation / r;            let y = 0.05 * (particle.phase * 5.0 + precession).sin() * (rs / r);
+            let precession = black_hole.spin * 0.05 * time.elapsed_secs() * time_dilation / r;
+            let y = 0.05 * (particle.phase * 5.0 + precession).sin() * (rs / r);
 
             transform.translation = Vec3::new(x, y, z);
 
             if r > black_hole.schwarzschild_radius * 1.01 {
-                particle.orbital_radius -= 0.01 * time.delta_secs() * time_dilation * (rs / r).powf(2.0);            }
+                particle.orbital_radius -=
+                    0.01 * time.delta_secs() * time_dilation * (rs / r).powf(2.0);
+            }
 
             if particle.orbital_radius < black_hole.schwarzschild_radius * 1.01 {
                 particle.orbital_radius = particle.last_stable_orbit + fastrand::f32() * 20.0;
@@ -300,26 +301,30 @@ fn update_grid_warping(
     mut meshes: ResMut<Assets<Mesh>>,
     grid_query: Query<&Mesh3d, With<GridMesh>>,
 ) {
+    fn warp_mesh_positions(positions_vec: &mut [[f32; 3]], black_hole: &BlackHole) {
+        for pos in positions_vec.iter_mut() {
+            let x = pos[0];
+            let z = pos[2];
+            let r = (x * x + z * z).sqrt();
+
+            if r > 0.1 {
+                let rs = black_hole.schwarzschild_radius;
+                let curvature = -(rs / r) * (1.0 + rs / (4.0 * r)).exp();
+                pos[1] = curvature * 2.0;
+            } else {
+                pos[1] = -10.0;
+            }
+        }
+    }
+
     if let Ok(black_hole) = black_hole_query.single() {
         for mesh3d in grid_query.iter() {
-            if let Some(mesh) = meshes.get_mut(&mesh3d.0) {
-                if let Some(positions) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION) {
-                    if let bevy::render::mesh::VertexAttributeValues::Float32x3(positions_vec) = positions {
-                        for pos in positions_vec.iter_mut() {
-                            let x = pos[0];
-                            let z = pos[2];
-                            let r = (x * x + z * z).sqrt();
-
-                            if r > 0.1 {
-                                let rs = black_hole.schwarzschild_radius;
-                                let curvature = -(rs / r) * (1.0 + rs / (4.0 * r)).exp();
-                                pos[1] = curvature * 2.0;
-                            } else {
-                                pos[1] = -10.0;
-                            }
-                        }
-                    }
-                }
+            if let Some(mesh) = meshes.get_mut(&mesh3d.0)
+                && let Some(positions) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+                && let bevy::render::mesh::VertexAttributeValues::Float32x3(positions_vec) =
+                    positions
+            {
+                warp_mesh_positions(positions_vec, black_hole);
             }
         }
     }
@@ -328,7 +333,14 @@ fn update_grid_warping(
 fn animate_particles(
     mut materials: ResMut<Assets<StandardMaterial>>,
     camera_query: Query<&Transform, With<Camera3d>>,
-    query: Query<(&Transform, &MeshMaterial3d<StandardMaterial>, &AccretionParticle), With<ParticleMaterial>>,
+    query: Query<
+        (
+            &Transform,
+            &MeshMaterial3d<StandardMaterial>,
+            &AccretionParticle,
+        ),
+        With<ParticleMaterial>,
+    >,
 ) {
     const C: f32 = 2.998e8;
 
@@ -362,7 +374,6 @@ fn animate_particles(
         }
     }
 }
-
 
 fn update_particle_temperatures(
     black_hole_query: Query<&BlackHole>,
